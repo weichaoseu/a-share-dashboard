@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>A股风格轮动仪表盘 V2</title>
+<script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
+<style>
+body{margin:0;background:#f5f7fb;color:#172033;font-family:system-ui,-apple-system,"Segoe UI","Microsoft YaHei",sans-serif}
+.wrap{max-width:1450px;margin:auto;padding:22px} .sub{color:#667085;margin:6px 0 18px}
+.notice{background:#fff7ed;border:1px solid #fed7aa;padding:10px 12px;border-radius:10px;color:#9a3412;margin-bottom:14px;font-size:13px}
+.cards{display:grid;grid-template-columns:repeat(6,1fr);gap:12px} .card,.panel{background:#fff;border:1px solid #e5e7eb;border-radius:14px}
+.card{padding:14px} .asset{font-weight:700} .daily{font-size:24px;margin:8px 0}
+.metrics{display:grid;grid-template-columns:repeat(3,1fr);gap:7px} .metric{background:#f8fafc;padding:8px;border-radius:9px;text-align:center}
+.metric b{display:block;font-size:18px} .metric span{font-size:11px;color:#667085}
+.panel{padding:16px;margin-top:16px} .chart{height:420px} .small{height:350px} .good{color:#087443} .bad{color:#b42318}
+table{width:100%;border-collapse:collapse} th,td{padding:9px;border-bottom:1px solid #eee;text-align:right} th:first-child,td:first-child{text-align:left}
+@media(max-width:1000px){.cards{grid-template-columns:repeat(3,1fr)}} @media(max-width:650px){.cards{grid-template-columns:repeat(2,1fr)}}
+</style></head>
+<body><div class="wrap">
+<h1>A股风格轮动仪表盘 V2</h1>
+<div class="sub">趋势 · 聪明钱代理因子 · 拥挤度 · 累计收益 · 相对强弱</div>
+<div id="notice" class="notice" style="display:none"></div>
+<div id="cards" class="cards"></div>
+<div class="panel"><h3>三因子比较（0–100）</h3><div id="factor" class="chart"></div></div>
+<div class="panel"><h3>当前指标表</h3><div id="rank"></div></div>
+<div class="panel"><h3>累计收益（统一起点=100）</h3><div id="cum" class="chart"></div></div>
+<div class="panel"><h3>60日相对强弱（相对沪深300）</h3><div id="rs" class="chart"></div></div>
+<div class="panel"><h3>20/60/120日收益率</h3><div id="ret" class="small"></div></div>
+</div>
+
+<script>
+const FALLBACK_DATA = {"asof": "首次运行后更新", "dates": ["初始化"], "series": {"科创50": {"trend": 50, "smart_money": 50, "crowding": 50, "daily_ret": 0, "ret20": 0, "ret60": 0, "ret120": 0, "cum": [100], "rs60": [null]}, "创业板50": {"trend": 50, "smart_money": 50, "crowding": 50, "daily_ret": 0, "ret20": 0, "ret60": 0, "ret120": 0, "cum": [100], "rs60": [null]}, "沪深300": {"trend": 50, "smart_money": 50, "crowding": 50, "daily_ret": 0, "ret20": 0, "ret60": 0, "ret120": 0, "cum": [100], "rs60": [null]}, "红利低波ETF": {"trend": 50, "smart_money": 50, "crowding": 50, "daily_ret": 0, "ret20": 0, "ret60": 0, "ret120": 0, "cum": [100], "rs60": [null]}, "煤炭ETF": {"trend": 50, "smart_money": 50, "crowding": 50, "daily_ret": 0, "ret20": 0, "ret60": 0, "ret120": 0, "cum": [100], "rs60": [null]}, "银行ETF": {"trend": 50, "smart_money": 50, "crowding": 50, "daily_ret": 0, "ret20": 0, "ret60": 0, "ret120": 0, "cum": [100], "rs60": [null]}}};
+
+function f(v){return v==null?"-":Number(v).toFixed(1)}
+
+function simpleFallbackChart(el, title, labels, values){
+  el.innerHTML = '<div style="padding:16px;color:#667085">'+title+
+    '<div style="margin-top:12px">'+labels.map((x,i)=>'<div style="display:flex;gap:8px;margin:8px 0"><span style="width:100px">'+x+
+    '</span><div style="height:18px;background:#dbeafe;border-radius:4px;width:'+Math.max(4,Math.min(100,Number(values[i])||0))+'%"></div><b>'+f(values[i])+'</b></div>').join('')+'</div></div>';
+}
+
+function render(d){
+  const ks=Object.keys(d.series);
+  cards.innerHTML=ks.map(k=>{let x=d.series[k];return `<div class="card"><div class="asset">${k}</div>
+  <div class="daily ${x.daily_ret>=0?"good":"bad"}">${x.daily_ret>=0?"+":""}${f(x.daily_ret)}%</div>
+  <div class="metrics"><div class="metric"><b>${f(x.trend)}</b><span>趋势</span></div>
+  <div class="metric"><b>${f(x.smart_money)}</b><span>聪明钱</span></div>
+  <div class="metric"><b>${f(x.crowding)}</b><span>拥挤度</span></div></div></div>`}).join("");
+
+  rank.innerHTML=`<table><tr><th>资产</th><th>趋势</th><th>聪明钱</th><th>拥挤度</th></tr>${
+    ks.map(k=>{let x=d.series[k];return `<tr><td>${k}</td><td>${f(x.trend)}</td><td>${f(x.smart_money)}</td><td>${f(x.crowding)}</td></tr>`}).join("")
+  }</table>`;
+
+  if (typeof echarts === "undefined") {
+    notice.style.display="block";
+    notice.textContent="ECharts 网络库未加载，因此当前用简化图形显示。连接互联网或通过 GitHub Pages 打开后会显示完整交互图表。";
+    simpleFallbackChart(factor,"三因子（简化显示）",ks,ks.map(k=>d.series[k].trend));
+    simpleFallbackChart(ret,"20日收益率（简化显示）",ks,ks.map(k=>d.series[k].ret20));
+    cum.innerHTML="<div style='padding:20px;color:#667085'>完整时间序列图需要加载 ECharts。当前数据卡片和表格仍可查看。</div>";
+    rs.innerHTML="<div style='padding:20px;color:#667085'>完整时间序列图需要加载 ECharts。</div>";
+    return;
+  }
+
+  echarts.init(factor).setOption({tooltip:{trigger:"axis"},legend:{},xAxis:{type:"category",data:ks},
+  yAxis:{type:"value",min:0,max:100},series:[
+  {name:"趋势",type:"bar",data:ks.map(k=>d.series[k].trend)},
+  {name:"聪明钱",type:"bar",data:ks.map(k=>d.series[k].smart_money)},
+  {name:"拥挤度",type:"bar",data:ks.map(k=>d.series[k].crowding)}]});
+
+  echarts.init(cum).setOption({tooltip:{trigger:"axis"},legend:{},xAxis:{type:"category",data:d.dates},
+  yAxis:{type:"value",scale:true},series:ks.map(k=>({name:k,type:"line",showSymbol:false,data:d.series[k].cum}))});
+
+  echarts.init(rs).setOption({tooltip:{trigger:"axis"},legend:{},xAxis:{type:"category",data:d.dates},
+  yAxis:{type:"value",scale:true},series:ks.filter(k=>k!=="沪深300").map(k=>({name:k,type:"line",showSymbol:false,data:d.series[k].rs60}))});
+
+  echarts.init(ret).setOption({tooltip:{trigger:"axis"},legend:{},xAxis:{type:"category",data:ks},
+  yAxis:{type:"value",axisLabel:{formatter:"{value}%"}},series:[
+  {name:"20日",type:"bar",data:ks.map(k=>d.series[k].ret20)},
+  {name:"60日",type:"bar",data:ks.map(k=>d.series[k].ret60)},
+  {name:"120日",type:"bar",data:ks.map(k=>d.series[k].ret120)}]}); 
+}
+
+async function load(){
+  let d=FALLBACK_DATA;
+  if (location.protocol !== "file:") {
+    try { d=await (await fetch("data/data.json?"+Date.now())).json(); }
+    catch(e) {
+      notice.style.display="block";
+      notice.textContent="未能读取最新 data.json，已使用网页内嵌的备用数据。";
+    }
+  } else {
+    notice.style.display="block";
+    notice.textContent="当前是双击本地HTML（file://）模式：浏览器不会读取外部 data.json，因此使用网页内嵌备用数据。若要读取最新数据，请运行本地服务器或部署到 GitHub Pages。";
+  }
+  render(d);
+}
+load();
+</script></body></html>
